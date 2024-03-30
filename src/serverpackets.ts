@@ -1,4 +1,4 @@
-import type { ClientState, NPC, Player, ServerPacket } from "./types";
+import type { ClientState, Loot, NPC, Player, ServerPacket } from "./types";
 import gsap from "gsap";
 import { spawnProjectile } from "./utils";
 
@@ -6,7 +6,10 @@ enum ServerPackets {
   PlayerPacket,
   DisconnectPacket,
   NPCPacket,
-  SpawnProjectilePacket
+  SpawnProjectilePacket,
+  KillNPCPacket,
+  SpawnLootPacket,
+  RemoveLootPacket
 }
 
 export const serializeDisconnectPacket = ({ name }: Pick<Player, "name">) => {
@@ -73,7 +76,7 @@ const deserializeNPCPacket = (buffer: ArrayBufferLike) => {
         y: y,
         duration: 0.1,
         overwrite: "auto",
-      })
+      });
     },
   };
 };
@@ -147,34 +150,125 @@ export const deserializeServerPacket: (
     case ServerPackets.NPCPacket:
       return deserializeNPCPacket(buffer);
     case ServerPackets.SpawnProjectilePacket:
-      return deserializeSpawnProjectilePacket(buffer)
+      return deserializeSpawnProjectilePacket(buffer);
+    case ServerPackets.KillNPCPacket:
+      return deserializeKillNPCpacket(buffer);
+    case ServerPackets.SpawnLootPacket:
+      return deserializeSpawnLootPacket(buffer);
+    case ServerPackets.RemoveLootPacket:
+      return deserializeRemoveLoot(buffer);
     default:
       console.log("unknown packet");
   }
 };
 
-
 export const serializeSpawnProjectilePacket = (player: Player) => {
+  const view = new DataView(new ArrayBuffer(3));
+
+  view.setUint8(0, ServerPackets.SpawnProjectilePacket);
+  view.setUint16(1, player.name);
+
+  return view;
+};
+
+const deserializeSpawnProjectilePacket: (
+  buffer: ArrayBufferLike
+) => ServerPacket = (buffer: ArrayBufferLike) => {
+  const view = new DataView(buffer);
+
+  const name = view.getUint16(1);
+
+  return {
+    data: name,
+    performAction(state) {
+      const player = state.otherPlayers.get(name);
+      if (player) {
+        spawnProjectile(player, state);
+      }
+    },
+  };
+};
+
+export const serializeKillNPCpacket = (npc: NPC) => {
+  const view = new DataView(new ArrayBuffer(3));
+
+  view.setUint8(0, ServerPackets.KillNPCPacket);
+  view.setUint16(1, npc.id);
+
+  return view;
+};
+
+const deserializeKillNPCpacket: (buffer: ArrayBufferLike) => ServerPacket = (
+  buffer: ArrayBufferLike
+) => {
+  const view = new DataView(buffer);
+  const id = view.getUint16(1);
+
+  return {
+    data: id,
+    performAction(state) {
+      state.npcs.delete(id);
+    },
+  };
+};
+
+export const serializeSpawnLootPacket = (loot: Loot) => {
+  const view = new DataView(new ArrayBuffer(7));
+
+  view.setUint8(0, ServerPackets.SpawnLootPacket);
+  view.setUint16(1, loot.id);
+  view.setUint16(3, loot.position.x);
+  view.setUint16(5, loot.position.y);
+
+  return view;
+};
+
+const deserializeSpawnLootPacket: (buffer: ArrayBufferLike) => ServerPacket = (
+  buffer
+) => {
+  const view = new DataView(buffer);
+
+  const id = view.getUint16(1);
+  const x = view.getUint16(3);
+  const y = view.getUint16(5);
+
+  return {
+    data: {
+      id: id,
+      position: {
+        x,
+        y,
+      },
+    },
+    performAction(state) {
+      state.loot.set(id, {
+        id: id,
+        position: {
+          x,
+          y,
+        },
+      });
+    },
+  };
+};
+
+export const serializeRemoveLoot = (loot: Loot) => {
   const view = new DataView(new ArrayBuffer(3))
 
-  view.setUint8(0, ServerPackets.SpawnProjectilePacket)
-  view.setUint16(1, player.name);
+  view.setUint8(0, ServerPackets.RemoveLootPacket)
+  view.setUint16(1, loot.id)
 
   return view
 }
 
-const deserializeSpawnProjectilePacket: (buffer: ArrayBufferLike) => ServerPacket = (buffer: ArrayBufferLike) => {
-  const view = new DataView(buffer);
+const deserializeRemoveLoot: (buffer: ArrayBufferLike) => ServerPacket = (buffer) => {
+  const view = new DataView(buffer)
+  const lootId = view.getUint16(1)
 
-  const name = view.getUint16(1)
-
-  return {data: name, performAction(state) {
-      const player = state.otherPlayers.get(name);
-      if (player) {
-        spawnProjectile(player, state)
-      }
+  return {data: {lootId}, performAction(state) {
+      console.log("Removed loot")
+      state.loot.delete(lootId)
   },}
-
 }
 // const data = {
 //   name: 1338,

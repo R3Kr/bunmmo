@@ -16,3 +16,4 @@ export const MAX_CLIENT_PROJECTILES = 100;
 export const DEFAULT_PROJECTILE_SPEED = 20;
 export const DEFAULT_NPC_WIDTH = 50;
 export const DEFAULT_NPC_HEIGHT = DEFAULT_NPC_WIDTH;
+export const LOOT_DISTANCE = 50;

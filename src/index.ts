@@ -3,6 +3,7 @@ import {
   serializeMovePacket,
   serializeMousePacket,
   serializeSpawnProjectilePacket,
+  serializePickupLootPacket,
 } from "./clientpackets";
 import {
   SequenceNumber,
@@ -22,6 +23,7 @@ import {
   MAX_CLIENT_PROJECTILES,
   DEFAULT_NPC_WIDTH,
   DEFAULT_NPC_HEIGHT,
+  LOOT_DISTANCE,
 } from "./constants";
 import {
   getPerpendicularVector2D,
@@ -72,7 +74,7 @@ const mouse = {
 };
 const projectiles = new MonitoredProjectiles();
 
-const state: ClientState = {
+const STATE: ClientState = {
   player: {
     name: NAME,
     ...INITIAL_POSITION,
@@ -83,10 +85,11 @@ const state: ClientState = {
   otherPlayers: new Map<number, Player>(),
   npcs: new Map<number, NPC>(),
   projectiles: projectiles,
+  loot: new Map(),
 }; //as const;
 
 //@ts-ignore
-window.state = state;
+window.state = STATE;
 
 const sequenceNum = new SequenceNumber();
 const unprocessedActions = Array<{
@@ -116,6 +119,24 @@ document.addEventListener("keydown", (e) => {
       break;
     case " ": {
       keys.space = true;
+      break;
+    }
+    case "e": {
+      let didLoot = false
+      for (const [id, l] of STATE.loot.entries()) {
+        if (
+          Math.sqrt(
+            Math.pow(l.position.x - STATE.player.realX, 2) +
+              Math.pow(l.position.y - STATE.player.realY, 2)
+          ) < LOOT_DISTANCE
+        ) {
+          socket.send(serializePickupLootPacket(sequenceNum.increase(), l));
+          STATE.loot.delete(id);
+          didLoot = true
+          break;
+        }
+      }
+      
       break;
     }
     default:
@@ -166,29 +187,28 @@ const handleServerUpdateForSelf = (
 
 socket.addEventListener("message", (event) => {
   const packet = deserializeServerPacket(event.data);
-  packet?.performAction(state);
+  packet?.performAction(STATE);
   console.log(packet);
 });
 
 const render = () => {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  ctx.fillText("🤑", 100, 100, 100)
   //draw main player
   drawTriangle(
     ctx,
-    state.player.x,
-    state.player.y,
-    state.player.width,
+    STATE.player.x,
+    STATE.player.y,
+    STATE.player.width,
     normalizeVector2D({
-      x: mouse.x - state.player.x,
-      y: mouse.y - state.player.y,
+      x: mouse.x - STATE.player.x,
+      y: mouse.y - STATE.player.y,
     }),
     "black"
   );
 
   //draw other players
-  for (const p of state.otherPlayers.values()) {
+  for (const p of STATE.otherPlayers.values()) {
     drawTriangle(
       ctx,
       p.x,
@@ -204,12 +224,13 @@ const render = () => {
 
   //draw npc
   ctx.fillStyle = "red";
-  for (const { position } of state.npcs.values()) {
+  for (const { position } of STATE.npcs.values()) {
     ctx.fillRect(position.x, position.y, DEFAULT_NPC_WIDTH, DEFAULT_NPC_HEIGHT);
   }
 
   ctx.fillRect(mouse.x, mouse.y, 30, 30);
 
+  //draw projectiles
   projectiles.forEach((p) => {
     drawTriangle(
       ctx,
@@ -217,10 +238,14 @@ const render = () => {
       p.position.y,
       10,
       p.normalizedVelocity,
-      p.spawner === state.player ? "green" : "red"
+      p.spawner === STATE.player ? "green" : "red"
     );
   });
 
+  //draw loot
+  for (const l of STATE.loot.values()) {
+    ctx.fillText("💰", l.position.x, l.position.y);
+  }
   requestAnimationFrame(render);
 };
 
@@ -230,7 +255,7 @@ let lastMouseY = 0;
 let canShoot = true;
 setInterval(() => {
   if (canShoot && keys.space) {
-    spawnProjectile(state.player, state);
+    spawnProjectile(STATE.player, STATE);
     setTimeout(() => {
       canShoot = true;
     }, SHOOT_COOLDOWN);
@@ -238,32 +263,32 @@ setInterval(() => {
     socket.send(serializeSpawnProjectilePacket(sequenceNum.increase()));
   }
   if (keys.w) {
-    state.player.realY =
-      state.player.realY - SPEED < 0 ? 0 : state.player.realY - SPEED;
+    STATE.player.realY =
+      STATE.player.realY - SPEED < 0 ? 0 : STATE.player.realY - SPEED;
   }
   if (keys.a) {
-    state.player.realX =
-      state.player.realX - SPEED < 0 ? 0 : state.player.realX - SPEED;
+    STATE.player.realX =
+      STATE.player.realX - SPEED < 0 ? 0 : STATE.player.realX - SPEED;
   }
   if (keys.s) {
-    state.player.realY =
-      state.player.realY + SPEED > WORLD.height
+    STATE.player.realY =
+      STATE.player.realY + SPEED > WORLD.height
         ? WORLD.height
-        : state.player.realY + SPEED;
+        : STATE.player.realY + SPEED;
   }
   if (keys.d) {
-    state.player.realX =
-      state.player.realX + SPEED > WORLD.width
+    STATE.player.realX =
+      STATE.player.realX + SPEED > WORLD.width
         ? WORLD.width
-        : state.player.realX + SPEED;
+        : STATE.player.realX + SPEED;
   }
   if (keys.plus) {
-    state.player.height++;
-    state.player.width++;
+    STATE.player.height++;
+    STATE.player.width++;
   }
   if (keys.minus) {
-    state.player.height--;
-    state.player.width--;
+    STATE.player.height--;
+    STATE.player.width--;
   }
   if (
     keys.w ||
@@ -291,9 +316,9 @@ setInterval(() => {
     );
   }
 
-  gsap.to(state.player, {
-    x: state.player.realX,
-    y: state.player.realY,
+  gsap.to(STATE.player, {
+    x: STATE.player.realX,
+    y: STATE.player.realY,
     duration: 0.1,
   });
 
@@ -316,8 +341,8 @@ setInterval(() => {
   lastMouseX = mouse.x;
   lastMouseY = mouse.y;
 
-  div.innerText = `x: ${state.player.x} `;
-  div2.innerText = `y: ${state.player.y} `;
+  div.innerText = `x: ${STATE.player.x} `;
+  div2.innerText = `y: ${STATE.player.y} `;
 }, 1000 / 30);
 
 render();

@@ -1,7 +1,5 @@
-import type { ControlData, MouseData } from "./types";
-import {ClientPackets} from "./types"
-
-
+import type { ControlData, Loot, MouseData } from "./types";
+import { ClientPackets } from "./types";
 
 export const deserializeClientPacket = (buffer: Buffer) => {
   switch (buffer.readUInt8()) {
@@ -18,8 +16,13 @@ export const deserializeClientPacket = (buffer: Buffer) => {
     case ClientPackets.SpawnProjectilePacket:
       return {
         type: ClientPackets.SpawnProjectilePacket,
-        packet: deserializeSpawnProjectilePacket(buffer)
-      }
+        packet: deserializeSpawnProjectilePacket(buffer),
+      };
+    case ClientPackets.PickupLootPacket:
+      return {
+        type: ClientPackets.PickupLootPacket,
+        packet: deserializePickupLootPacket(buffer),
+      };
     default:
       console.log("unknown packet");
   }
@@ -78,14 +81,37 @@ export const serializeMovePacket = (
 
 export const serializeSpawnProjectilePacket = (sequenceNumUInt8: number) => {
   const arr = new Uint8Array(2);
-  arr[0] = ClientPackets.SpawnProjectilePacket
+  arr[0] = ClientPackets.SpawnProjectilePacket;
   arr[1] = sequenceNumUInt8;
   return arr;
-}
+};
 
 const deserializeSpawnProjectilePacket = (buffer: Buffer) => {
-    return {sequenceNum: buffer.readUInt8(1)};
-}
+  return { sequenceNum: buffer.readUInt8(1) };
+};
+
+export const serializePickupLootPacket = (
+  sequenceNumUInt8: number,
+  loot: Loot
+) => {
+  const view = new DataView(new ArrayBuffer(4));
+
+  view.setUint8(0, ClientPackets.PickupLootPacket);
+  view.setUint8(1, sequenceNumUInt8);
+  view.setUint16(2, loot.id);
+
+  return view;
+};
+
+const deserializePickupLootPacket = (buffer: Buffer) => {
+  const sequenceNum = buffer.readUInt8(1);
+  const lootId = buffer.readUInt16BE(2);
+
+  return {
+    sequenceNum,
+    lootId,
+  };
+};
 
 // const data = serializeMovePacket({ w: true, a: true, s: true, d: false });
 

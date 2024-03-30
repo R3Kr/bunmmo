@@ -42,6 +42,7 @@ export interface ClientState {
   readonly otherPlayers: Map<number, Player>;
   readonly npcs: Map<number, NPC>;
   readonly projectiles: Array<Projectile>;
+  readonly loot: Map<number, Loot>
 }
 
 export interface ServerState {
@@ -67,9 +68,15 @@ export enum ClientPackets {
   MovePacket,
   MousePacket,
   SpawnProjectilePacket,
+  PickupLootPacket
 }
 
 export interface NPC {
+  id: number;
+  position: Vector;
+}
+
+export interface Loot {
   id: number;
   position: Vector;
 }

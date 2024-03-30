@@ -7,12 +7,16 @@ import {
   type NPC,
   type ServerState,
   type Projectile,
+  type Loot,
 } from "./src/types";
 import {
   serializeDisconnectPacket,
   serializeNPCPacket,
   serializePlayerPacket,
   serializeSpawnProjectilePacket,
+  serializeKillNPCpacket,
+  serializeSpawnLootPacket,
+  serializeRemoveLoot,
 } from "./src/serverpackets";
 import {
   SPEED,
@@ -22,8 +26,10 @@ import {
   DEFAULT_NPC_HEIGHT,
 } from "./src/constants";
 import {
+  DefaultLoot,
   MonitoredProjectiles,
   collidesWith,
+  fillNPCs,
   normalizeVector2D,
   scaleVector,
   spawnServerProjectile,
@@ -34,21 +40,25 @@ const html = Bun.file("./src/index.html");
 const getJs = async () => {
   return await Bun.build({
     entrypoints: ["./src/index.ts"],
-    minify: process.env.NODE_ENV === "development",
+    minify: process.env.NODE_ENV !== "development",
   });
 };
 
 const players = new Map<ServerWebSocket<number>, Player>();
-
-
-
+let loots: Array<Loot> = [];
 const projectiles = new MonitoredProjectiles();
 const STATE: ServerState = {
   players: players,
   npcs: Array(40)
     .fill(0)
     .map<NPC>((v, i) => {
-      return { id: i, position: { x: 0, y: 0 } };
+      return {
+        id: i,
+        position: {
+          x: Math.floor(Math.random() * (WORLD.width - DEFAULT_NPC_WIDTH)),
+          y: Math.floor(Math.random() * (WORLD.height - DEFAULT_NPC_HEIGHT)),
+        },
+      };
     }),
   projectiles: projectiles,
 };
@@ -86,6 +96,9 @@ const server = Bun.serve<number>({
       for (const npc of STATE.npcs.values()) {
         ws.send(serializeNPCPacket(npc));
       }
+      loots.forEach((l) => {
+        ws.send(serializeSpawnLootPacket(l));
+      });
       players.set(ws, {
         name: ws.data,
         ...INITIAL_POSITION,
@@ -153,6 +166,18 @@ const server = Bun.serve<number>({
         spawnServerProjectile(p, STATE);
         server.publish(p.name.toString(), serializeSpawnProjectilePacket(p));
       }
+
+      if (type === ClientPackets.PickupLootPacket) {
+        const { lootId } = packet as {
+          sequenceNum: number;
+          lootId: number;
+        };
+        const loot = loots.find((l) => l.id === lootId);
+        if (loot) {
+          server.publish("global", serializeRemoveLoot(loot));
+          loots = loots.filter((l) => l.id !== lootId);
+        }
+      }
     },
     close(ws, code, reason) {
       server.publish(
@@ -177,23 +202,30 @@ setInterval(() => {
     p.position.x += p.normalizedVelocity.x * p.speedFactor;
     p.position.y += p.normalizedVelocity.y * p.speedFactor;
 
-    for (const npc of STATE.npcs.values()) {
+    for (let i = STATE.npcs.length - 1; i >= 0; i--) {
       const collisionHappend = collidesWith(p.position, {
-        topLeftPos: npc.position,
+        topLeftPos: STATE.npcs[i].position,
         width: DEFAULT_NPC_WIDTH,
         height: DEFAULT_NPC_HEIGHT,
       });
       if (collisionHappend) {
-        npc.position.x = Math.floor(
-          Math.random() * (WORLD.width - DEFAULT_NPC_WIDTH)
-        );
-        npc.position.y = Math.floor(
-          Math.random() * (WORLD.height - DEFAULT_NPC_HEIGHT)
-        );
-        server.publish("global", serializeNPCPacket(npc));
+        server.publish("global", serializeKillNPCpacket(STATE.npcs[i]));
+
+        if (Math.random() < 0.1) {
+          const loot = new DefaultLoot(STATE.npcs[i].position);
+          server.publish("global", serializeSpawnLootPacket(loot));
+          loots.push(loot);
+        }
+        STATE.npcs.splice(i, 1);
       }
     }
   });
+  if (STATE.npcs.length === 0) {
+    fillNPCs(STATE.npcs, Math.random() * 50);
+    STATE.npcs.forEach((npc) => {
+      server.publish("global", serializeNPCPacket(npc));
+    });
+  }
 }, 1000 / 30);
 
 // setInterval(() => {

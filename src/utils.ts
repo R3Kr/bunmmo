@@ -1,10 +1,17 @@
-import { DEFAULT_PROJECTILE_SPEED, WORLD } from "./constants";
+import {
+  DEFAULT_NPC_HEIGHT,
+  DEFAULT_NPC_WIDTH,
+  DEFAULT_PROJECTILE_SPEED,
+  WORLD,
+} from "./constants";
 import type {
   ClientState,
   Vector,
   Player,
   Projectile,
   ServerState,
+  NPC,
+  Loot,
 } from "./types";
 
 export function normalizeVector2D(vector: Vector) {
@@ -108,14 +115,15 @@ export class MonitoredProjectiles extends Array<Projectile> {
   }
 
   garbageCollect() {
-    while (this.length > 0 && 
-      (this[0].position.x < 0 || 
-       this[0].position.x >= WORLD.width || 
-       this[0].position.y < 0 || 
-       this[0].position.y >= WORLD.height)) {
+    while (
+      this.length > 0 &&
+      (this[0].position.x < 0 ||
+        this[0].position.x >= WORLD.width ||
+        this[0].position.y < 0 ||
+        this[0].position.y >= WORLD.height)
+    ) {
       this.shift(); // Remove the first projectile if it's out of bounds
     }
-  
   }
   // push(...items: Projectile[]): number {
   //   items.forEach((i) => super.push(i));
@@ -128,7 +136,12 @@ export const collidesWith = (
   point: Vector,
   rect: { topLeftPos: Vector; width: number; height: number }
 ) => {
-  if (point.x < rect.topLeftPos.x || point.y < rect.topLeftPos.y || point.x >= WORLD.width || point.y >= WORLD.width) {
+  if (
+    point.x < rect.topLeftPos.x ||
+    point.y < rect.topLeftPos.y ||
+    point.x >= WORLD.width ||
+    point.y >= WORLD.width
+  ) {
     //console.log("Didnt collide");
     return false;
   }
@@ -144,3 +157,25 @@ export const collidesWith = (
 
   return false;
 };
+
+export const fillNPCs = (npcs: Array<NPC>, amount: number) => {
+  for (let i = 0; i < amount; i++) {
+    npcs.push({
+      id: i,
+      position: {
+        x: Math.floor(Math.random() * (WORLD.width - DEFAULT_NPC_WIDTH)),
+        y: Math.floor(Math.random() * (WORLD.height - DEFAULT_NPC_HEIGHT)),
+      },
+    });
+  }
+};
+
+export class DefaultLoot implements Loot {
+  static nextId = 0;
+  id: number;
+  position: Vector;
+  constructor(position: Vector) {
+    this.position = {...position}
+    this.id = DefaultLoot.nextId++
+  }
+}
