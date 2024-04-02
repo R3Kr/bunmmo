@@ -7,9 +7,12 @@ export const INITIAL_POSITION = {
 } as const;
 
 export const WORLD = {
-  width: 600 * 1.5,
-  height: 400 * 1.5,
+  width: 2000,
+  height: 2000,
 } as const;
+
+export const CANVAS_WIDTH = 600 ;
+export const CANVAS_HEIGHT = 400 ;
 
 export const SHOOT_COOLDOWN = 125;
 export const MAX_CLIENT_PROJECTILES = 100;

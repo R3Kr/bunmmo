@@ -13,6 +13,7 @@ import {
   type ClientState,
   type Projectile,
   type NPC,
+  type Loot,
 } from "./types";
 import { deserializeServerPacket } from "./serverpackets";
 import {
@@ -24,6 +25,8 @@ import {
   DEFAULT_NPC_WIDTH,
   DEFAULT_NPC_HEIGHT,
   LOOT_DISTANCE,
+  CANVAS_WIDTH,
+  CANVAS_HEIGHT,
 } from "./constants";
 import {
   getPerpendicularVector2D,
@@ -34,6 +37,9 @@ import {
   MonitoredProjectiles,
 } from "./utils";
 //import moneybag from "./moneybag.svg"
+//@ts-ignore
+import map1 from "../maps/map1.txt";
+import { WorldMap } from "../maps/maputils";
 
 const NAME = Math.floor(Math.random() * 0xffff);
 const socket = new WebSocket(
@@ -47,8 +53,8 @@ socket.binaryType = "arraybuffer";
 
 const body = document.querySelector("body")!;
 const canvas = document.createElement("canvas");
-canvas.width = WORLD.width;
-canvas.height = WORLD.height;
+canvas.width = CANVAS_WIDTH;
+canvas.height = CANVAS_HEIGHT;
 
 const div = document.createElement("div");
 const div2 = document.createElement("div");
@@ -87,6 +93,13 @@ const STATE: ClientState = {
   projectiles: projectiles,
   loot: new Map(),
 }; //as const;
+let nearbyLoot: Loot[] = [];
+
+const worldmap = WorldMap.new(map1, WORLD.width, WORLD.height);
+const camera: Vector = {
+  x: 0,
+  y: 0,
+};
 
 //@ts-ignore
 window.state = STATE;
@@ -122,7 +135,7 @@ document.addEventListener("keydown", (e) => {
       break;
     }
     case "e": {
-      let didLoot = false
+      let didLoot = false;
       for (const [id, l] of STATE.loot.entries()) {
         if (
           Math.sqrt(
@@ -132,11 +145,11 @@ document.addEventListener("keydown", (e) => {
         ) {
           socket.send(serializePickupLootPacket(sequenceNum.increase(), l));
           STATE.loot.delete(id);
-          didLoot = true
+          didLoot = true;
           break;
         }
       }
-      
+
       break;
     }
     default:
@@ -177,8 +190,8 @@ canvas.addEventListener("mousemove", (ev) => {
   console.log(
     `X: ${ev.x} Offset X: ${ev.offsetX} Y: ${ev.y} Offset Y: ${ev.offsetY}`
   );
-  mouse.x = ev.offsetX;
-  mouse.y = ev.offsetY;
+  mouse.x = ev.offsetX; //+ camera.x;
+  mouse.y = ev.offsetY; //+ camera.y;
 });
 
 const handleServerUpdateForSelf = (
@@ -194,6 +207,7 @@ socket.addEventListener("message", (event) => {
 const render = () => {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+  worldmap?.render(ctx, camera);
   //draw main player
   drawTriangle(
     ctx,
@@ -201,10 +215,11 @@ const render = () => {
     STATE.player.y,
     STATE.player.width,
     normalizeVector2D({
-      x: mouse.x - STATE.player.x,
-      y: mouse.y - STATE.player.y,
+      x: mouse.x + camera.x - STATE.player.x,
+      y: mouse.y + camera.y - STATE.player.y,
     }),
-    "black"
+    "black",
+    camera
   );
 
   //draw other players
@@ -218,17 +233,23 @@ const render = () => {
         x: p.mouse.x - p.x,
         y: p.mouse.y - p.y,
       }),
-      "blue"
+      "blue",
+      camera
     );
   }
 
   //draw npc
   ctx.fillStyle = "red";
   for (const { position } of STATE.npcs.values()) {
-    ctx.fillRect(position.x, position.y, DEFAULT_NPC_WIDTH, DEFAULT_NPC_HEIGHT);
+    ctx.fillRect(
+      position.x - camera.x,
+      position.y - camera.y,
+      DEFAULT_NPC_WIDTH,
+      DEFAULT_NPC_HEIGHT
+    );
   }
 
-  ctx.fillRect(mouse.x, mouse.y, 30, 30);
+  //ctx.fillRect(mouse.x, mouse.y, 30, 30);
 
   //draw projectiles
   projectiles.forEach((p) => {
@@ -238,13 +259,20 @@ const render = () => {
       p.position.y,
       10,
       p.normalizedVelocity,
-      p.spawner === STATE.player ? "green" : "red"
+      p.spawner === STATE.player ? "green" : "red",
+      camera
     );
   });
 
+  //draw nearbyloot
+  ctx.fillStyle = "green";
+  nearbyLoot.forEach((l) =>
+    ctx.fillRect(l.position.x - camera.x, l.position.y - 10 - camera.y, 15, 15)
+  );
+
   //draw loot
   for (const l of STATE.loot.values()) {
-    ctx.fillText("💰", l.position.x, l.position.y);
+    ctx.fillText("💰", l.position.x - camera.x, l.position.y - camera.y);
   }
   requestAnimationFrame(render);
 };
@@ -253,9 +281,11 @@ let lastPacketWasNoControlData = true;
 let lastMouseX = 0;
 let lastMouseY = 0;
 let canShoot = true;
+let lastPlayerX = 0;
+let lastPlayerY = 0;
 setInterval(() => {
   if (canShoot && keys.space) {
-    spawnProjectile(STATE.player, STATE);
+    spawnProjectile(STATE.player, STATE, camera);
     setTimeout(() => {
       canShoot = true;
     }, SHOOT_COOLDOWN);
@@ -300,6 +330,10 @@ setInterval(() => {
     !lastPacketWasNoControlData
   ) {
     socket.send(serializeMovePacket(sequenceNum.increase(), keys));
+    socket.send(serializeMousePacket(sequenceNum.increase(), {
+      x: mouse.x + camera.x,
+      y: mouse.y + camera.y,
+    }))
     //-----Maybe in future
     // unprocessedActions.push({
     //   sequenceNum: sequenceNum.getUInt8(),
@@ -334,12 +368,42 @@ setInterval(() => {
   });
 
   if (!(lastMouseX === mouse.x && lastMouseY === mouse.y)) {
-    socket.send(serializeMousePacket(sequenceNum.increase(), mouse));
+    socket.send(
+      serializeMousePacket(sequenceNum.increase(), {
+        x: mouse.x + camera.x,
+        y: mouse.y + camera.y,
+      })
+    );
     console.log("Sent mouse packet");
   }
 
   lastMouseX = mouse.x;
   lastMouseY = mouse.y;
+
+  if (
+    !(lastPlayerX === STATE.player.realX && lastPlayerY === STATE.player.realY)
+  ) {
+    nearbyLoot = [];
+    for (const l of STATE.loot.values()) {
+      if (
+        Math.sqrt(
+          Math.pow(l.position.x - STATE.player.realX, 2) +
+            Math.pow(l.position.y - STATE.player.realY, 2)
+        ) < LOOT_DISTANCE
+      ) {
+        nearbyLoot.push(l);
+      }
+    }
+
+    gsap.to(camera, {
+      x: STATE.player.realX - CANVAS_WIDTH / 2,
+      y: STATE.player.realY - CANVAS_HEIGHT / 2,
+      duration: 1,
+    });
+  }
+
+  lastPlayerX = STATE.player.realX;
+  lastPlayerY = STATE.player.realY;
 
   div.innerText = `x: ${STATE.player.x} `;
   div2.innerText = `y: ${STATE.player.y} `;

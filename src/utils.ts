@@ -39,7 +39,8 @@ export const drawTriangle = (
   middleY: number,
   size: number,
   normedVec: Vector,
-  color: string
+  color: string,
+  camera: Vector
 ) => {
   const perpVec = getPerpendicularVector2D(normedVec);
   const topX = middleX + normedVec.x * size;
@@ -54,16 +55,16 @@ export const drawTriangle = (
   // Draw a triangle
   ctx.fillStyle = color;
   ctx.beginPath();
-  ctx.moveTo(topX, topY);
-  ctx.lineTo(corner1X, corner1Y);
-  ctx.lineTo(corner2X, corner2Y);
+  ctx.moveTo(topX - camera.x, topY - camera.y);
+  ctx.lineTo(corner1X - camera.x, corner1Y - camera.y);
+  ctx.lineTo(corner2X - camera.x, corner2Y - camera.y);
   ctx.fill(); // Fill the triangle
 
   ctx.fillStyle = "blue";
-  ctx.fillRect(middleX, middleY, 1, 1);
+  ctx.fillRect(middleX - camera.x, middleY - camera.y, 1, 1);
 };
 
-export const spawnProjectile = (spawner: Player, state: ClientState) => {
+export const spawnProjectile = (spawner: Player, state: ClientState, camera?: Vector) => {
   const projectile = {
     position: {
       x: spawner === state.player ? state.player.realX : spawner.x,
@@ -75,10 +76,10 @@ export const spawnProjectile = (spawner: Player, state: ClientState) => {
     },
     normalizedVelocity: normalizeVector2D({
       x:
-        spawner.mouse.x -
+        spawner.mouse.x + (camera ? camera.x : 0) -
         (spawner === state.player ? state.player.realX : spawner.x),
       y:
-        spawner.mouse.y -
+        spawner.mouse.y + (camera ? camera.y : 0) -
         (spawner === state.player ? state.player.realY : spawner.y),
     }),
     speedFactor: DEFAULT_PROJECTILE_SPEED,
@@ -158,24 +159,77 @@ export const collidesWith = (
   return false;
 };
 
-export const fillNPCs = (npcs: Array<NPC>, amount: number) => {
+export const fillNPCs = (
+  npcs: Array<NPC>,
+  amount: number,
+  onUpdate: (npc: NPC) => void
+) => {
   for (let i = 0; i < amount; i++) {
-    npcs.push({
-      id: i,
-      position: {
-        x: Math.floor(Math.random() * (WORLD.width - DEFAULT_NPC_WIDTH)),
-        y: Math.floor(Math.random() * (WORLD.height - DEFAULT_NPC_HEIGHT)),
-      },
-    });
+    npcs.push(
+      Math.random() > 0.1
+        ? {
+            id: i,
+            position: {
+              x: Math.floor(Math.random() * (WORLD.width - DEFAULT_NPC_WIDTH)),
+              y: Math.floor(
+                Math.random() * (WORLD.height - DEFAULT_NPC_HEIGHT)
+              ),
+            },
+            state: "alive",
+          }
+        : new RadNPC(
+            i,
+            {
+              x: Math.floor(Math.random() * (WORLD.width - DEFAULT_NPC_WIDTH)),
+              y: Math.floor(
+                Math.random() * (WORLD.height - DEFAULT_NPC_HEIGHT)
+              ),
+            },
+            onUpdate
+          )
+    );
   }
 };
+
+class RadNPC implements NPC {
+  static readonly radnpcs: Array<WeakRef<RadNPC>> = [];
+  id: number;
+  position: Vector;
+  update: () => void;
+  state: "alive" | "dead" = "alive";
+  constructor(id: number, position: Vector, onUpdate: (npc: NPC) => void) {
+    this.id = id;
+    this.position = position;
+    this.update = () => {
+      if (this.state === "alive") {
+        position.x = Math.floor(
+          Math.random() * (WORLD.width - DEFAULT_NPC_WIDTH)
+        );
+        position.y = Math.floor(
+          Math.random() * (WORLD.height - DEFAULT_NPC_HEIGHT)
+        );
+        onUpdate(this);
+      }
+    };
+    if (RadNPC.radnpcs.length === 0) {
+      RadNPC.startRadding();
+    }
+    RadNPC.radnpcs.push(new WeakRef(this));
+  }
+
+  static startRadding() {
+    setInterval(() => {
+      this.radnpcs.forEach((ref) => ref.deref()?.update());
+    }, 300);
+  }
+}
 
 export class DefaultLoot implements Loot {
   static nextId = 0;
   id: number;
   position: Vector;
   constructor(position: Vector) {
-    this.position = {...position}
-    this.id = DefaultLoot.nextId++
+    this.position = { ...position };
+    this.id = DefaultLoot.nextId++;
   }
 }

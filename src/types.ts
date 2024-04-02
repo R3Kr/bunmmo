@@ -40,7 +40,7 @@ export type MouseData = Vector;
 export interface ClientState {
   readonly player: Player & { realX: number; realY: number };
   readonly otherPlayers: Map<number, Player>;
-  readonly npcs: Map<number, NPC>;
+  readonly npcs: Map<number, Omit<NPC, "state">>;
   readonly projectiles: Array<Projectile>;
   readonly loot: Map<number, Loot>
 }
@@ -74,6 +74,7 @@ export enum ClientPackets {
 export interface NPC {
   id: number;
   position: Vector;
+  state: "alive" | "dead"
 }
 
 export interface Loot {

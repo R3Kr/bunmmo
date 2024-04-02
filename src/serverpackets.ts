@@ -9,7 +9,7 @@ enum ServerPackets {
   SpawnProjectilePacket,
   KillNPCPacket,
   SpawnLootPacket,
-  RemoveLootPacket
+  RemoveLootPacket,
 }
 
 export const serializeDisconnectPacket = ({ name }: Pick<Player, "name">) => {
@@ -253,23 +253,28 @@ const deserializeSpawnLootPacket: (buffer: ArrayBufferLike) => ServerPacket = (
 };
 
 export const serializeRemoveLoot = (loot: Loot) => {
-  const view = new DataView(new ArrayBuffer(3))
+  const view = new DataView(new ArrayBuffer(3));
 
-  view.setUint8(0, ServerPackets.RemoveLootPacket)
-  view.setUint16(1, loot.id)
+  view.setUint8(0, ServerPackets.RemoveLootPacket);
+  view.setUint16(1, loot.id);
 
-  return view
-}
+  return view;
+};
 
-const deserializeRemoveLoot: (buffer: ArrayBufferLike) => ServerPacket = (buffer) => {
-  const view = new DataView(buffer)
-  const lootId = view.getUint16(1)
+const deserializeRemoveLoot: (buffer: ArrayBufferLike) => ServerPacket = (
+  buffer
+) => {
+  const view = new DataView(buffer);
+  const lootId = view.getUint16(1);
 
-  return {data: {lootId}, performAction(state) {
-      console.log("Removed loot")
-      state.loot.delete(lootId)
-  },}
-}
+  return {
+    data: { lootId },
+    performAction(state) {
+      console.log("Removed loot");
+      state.loot.delete(lootId);
+    },
+  };
+};
 // const data = {
 //   name: 1338,
 // };

@@ -58,6 +58,7 @@ const STATE: ServerState = {
           x: Math.floor(Math.random() * (WORLD.width - DEFAULT_NPC_WIDTH)),
           y: Math.floor(Math.random() * (WORLD.height - DEFAULT_NPC_HEIGHT)),
         },
+        state: "alive",
       };
     }),
   projectiles: projectiles,
@@ -210,6 +211,7 @@ setInterval(() => {
       });
       if (collisionHappend) {
         server.publish("global", serializeKillNPCpacket(STATE.npcs[i]));
+        STATE.npcs[i].state = "dead";
 
         if (Math.random() < 0.1) {
           const loot = new DefaultLoot(STATE.npcs[i].position);
@@ -221,7 +223,9 @@ setInterval(() => {
     }
   });
   if (STATE.npcs.length === 0) {
-    fillNPCs(STATE.npcs, Math.random() * 50);
+    fillNPCs(STATE.npcs, Math.random() * 50, (npc) =>
+      server.publish("global", serializeNPCPacket(npc))
+    );
     STATE.npcs.forEach((npc) => {
       server.publish("global", serializeNPCPacket(npc));
     });
