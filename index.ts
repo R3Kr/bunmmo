@@ -34,9 +34,11 @@ import {
   scaleVector,
   spawnServerProjectile,
 } from "./src/utils";
-
+import { db, lucia } from "./server/auth";
+let currUserGameId = 0;
 const ico = Bun.file("./favicon.ico");
-const html = Bun.file("./src/index.html");
+const gameHtml = Bun.file("./html/index.html");
+const loginHtml = Bun.file("./html/login.html");
 const getJs = async () => {
   return await Bun.build({
     entrypoints: ["./src/index.ts"],
@@ -69,6 +71,47 @@ const js = await (await getJs()).outputs[0].text();
 const server = Bun.serve<number>({
   fetch: async (req, server) => {
     const url = new URL(req.url);
+    if (url.pathname === "/login") {
+      if (req.method === "GET") {
+        return new Response(loginHtml);
+      } else {
+        const formdata = await req.formData()
+        const name = formdata.get("name");
+        const password = formdata.get("password");
+        if (!name) {
+          return new Response(loginHtml);
+        }
+
+        const user = db.get(name.toString());
+        if (!user) {
+          db.createUser(name.toString(), password?.toString() ?? "")
+        }
+        else if (user.password !== password?.toString()) {
+          return new Response(loginHtml);
+        }
+        const session = await lucia.createSession(name.toString(), {});
+        const sessionCookie = lucia.createSessionCookie(session.id);
+        const headers = new Headers()
+        headers.set("Set-Cookie", sessionCookie.serialize())
+        headers.set("Location", "/")
+        return new Response("redirected", {
+          status: 302,
+          headers: headers
+        })
+      }
+    }
+
+    const sessionId = lucia.readSessionCookie(req.headers.get("Cookie") ?? "");
+    const { user, session } = await lucia.validateSession(sessionId ?? "");
+    if (!session) {
+      const headers = new Headers();
+      headers.set("Location", "/login");
+      return new Response("forbidden bro", {
+        status: 302,
+        headers: headers,
+      });
+    }
+
     switch (url.pathname) {
       case "/index.js":
         const resp =
@@ -79,11 +122,10 @@ const server = Bun.serve<number>({
       case "/favicon.ico":
         return new Response(ico);
       case "/ws":
-        const asd = server.upgrade(req, { data: url.searchParams.get("name") });
+        const asd = server.upgrade(req, { data: user.gameId});
         return new Response(asd ? "ok" : "error");
-
       default:
-        return new Response(html);
+        return new Response(gameHtml);
     }
   },
   websocket: {

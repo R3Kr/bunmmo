@@ -395,9 +395,12 @@ setInterval(() => {
       }
     }
 
+    const newCameraX = STATE.player.realX - CANVAS_WIDTH / 2
+    const newCameraY = STATE.player.realY - CANVAS_HEIGHT / 2
+
     gsap.to(camera, {
-      x: STATE.player.realX - CANVAS_WIDTH / 2,
-      y: STATE.player.realY - CANVAS_HEIGHT / 2,
+      x: newCameraX < 0 ? 0 : newCameraX >= WORLD.width - CANVAS_WIDTH ? WORLD.width - CANVAS_WIDTH : newCameraX ,
+      y: newCameraY < 0 ? 0 : newCameraY >= WORLD.height - CANVAS_HEIGHT ? WORLD.height - CANVAS_HEIGHT : newCameraY,
       duration: 1,
     });
   }
