@@ -75,7 +75,7 @@ const server = Bun.serve<number>({
       if (req.method === "GET") {
         return new Response(loginHtml);
       } else {
-        const formdata = await req.formData()
+        const formdata = await req.formData();
         const name = formdata.get("name");
         const password = formdata.get("password");
         if (!name) {
@@ -84,20 +84,19 @@ const server = Bun.serve<number>({
 
         const user = db.get(name.toString());
         if (!user) {
-          db.createUser(name.toString(), password?.toString() ?? "")
-        }
-        else if (user.password !== password?.toString()) {
+          db.createUser(name.toString(), password?.toString() ?? "");
+        } else if (user.password !== password?.toString()) {
           return new Response(loginHtml);
         }
         const session = await lucia.createSession(name.toString(), {});
         const sessionCookie = lucia.createSessionCookie(session.id);
-        const headers = new Headers()
-        headers.set("Set-Cookie", sessionCookie.serialize())
-        headers.set("Location", "/")
+        const headers = new Headers();
+        headers.set("Set-Cookie", sessionCookie.serialize());
+        headers.set("Location", "/");
         return new Response("redirected", {
           status: 302,
-          headers: headers
-        })
+          headers: headers,
+        });
       }
     }
 
@@ -122,7 +121,7 @@ const server = Bun.serve<number>({
       case "/favicon.ico":
         return new Response(ico);
       case "/ws":
-        const asd = server.upgrade(req, { data: user.gameId});
+        const asd = server.upgrade(req, { data: user.gameId });
         return new Response(asd ? "ok" : "error");
       default:
         return new Response(gameHtml);

@@ -77,6 +77,12 @@ class DB extends Map<string, DatabaseUser  & {password: string}> {
 export const db = new DB()//new Map<string, DatabaseUser>()
 
 export const lucia = new Lucia(new InMemoryDBAdapter(db), {
+  sessionCookie: {
+		attributes: {
+			// set to `true` when using HTTPS
+			secure: process.env.NODE_ENV === "production"
+		}
+	},
   getUserAttributes(databaseUserAttributes) {
       return {
         gameId: databaseUserAttributes.gameId
